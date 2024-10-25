@@ -1,66 +1,74 @@
-const TelegramApi = require("node-telegram-bot-api");
-const { gameOption, againOption } = require("./options");
-const token = "7659241216:AAGpYvOJtak-gytUI-7afg17aRlROhyWhYg";
+require("dotenv").config();
+const {
+	Bot,
+	GrammyError,
+	HttpError,
+	Keyboard,
+	InlineKeyboard,
+} = require("grammy");
+const { hydrate } = require("@grammyjs/hydrate");
+const { text } = require("stream/consumers");
 
-const bot = new TelegramApi(token, { polling: true });
+const bot = new Bot(process.env.BOT_API_KEY);
+bot.use(hydrate());
 
-const chats = {};
-
-bot.setMyCommands([
-	{ command: "/start", description: "Начни сначала" },
-	{ command: "/finebutton", description: "Нажми сюда" },
-	{ command: "/game", description: "Смотри что умею" },
+bot.api.setMyCommands([
+	{ command: "start", description: "Запуск бота" },
+	{ command: "menu", description: "Получить меню" },
 ]);
 
-const startGame = async (chatId) => {
-	await bot.sendMessage(chatId, "Я загадал цифру от 0 до 9");
-	const randomNumber = Math.floor(Math.random() * 10);
-	chats[chatId] = randomNumber;
-	await bot.sendMessage(chatId, "А ты угадай", gameOption);
-};
-
-const start = () => {
-	bot.on("message", async (msg) => {
-		const text = msg.text;
-		const chatId = msg.chat.id;
-		const firstName = msg.from.first_name;
-
-		if (text === "/start") {
-			await bot.sendSticker(
-				chatId,
-				"https://tlgrm.eu/_/stickers/8a1/9aa/8a19aab4-98c0-37cb-a3d4-491cb94d7e12/2.webp"
-			);
-			return bot.sendMessage(chatId, `Добро пожаловать, ${firstName}!`);
-		}
-		if (text === "/finebutton") {
-			return bot.sendMessage(chatId, "Ты нажал на крутую кнопку)");
-		}
-		if (text === "/game") {
-			return startGame(chatId);
-		}
-		return bot.sendMessage(chatId, "Я не понимаю о чем ты, обратись к меню");
+bot.command("start", async (ctx) => {
+	await ctx.reply("Привет я написан на GrammyJS", {
+		parse_mode: "HTML",
 	});
+	console.log(ctx.me);
+});
 
-	bot.on("callback_query", (msg) => {
-		const data = msg.data;
-		const chatId = msg.message.chat.id;
-		if (data === "/again") {
-			return startGame(chatId);
-		}
-		if (data === chats[chatId]) {
-			return bot.sendMessage(
-				chatId,
-				`Поздравляю, ты угадал цифру ${chats[chatId]}`,
-				againOption
-			);
-		} else {
-			return bot.sendMessage(
-				chatId,
-				`Упс ты не угадал, я загадал цифру ${chats[chatId]}`,
-				againOption
-			);
-		}
+const menuKeyboard = new InlineKeyboard()
+	.text("Узнать статус закза", "order-status")
+	.text("Обратиться в поддержку", "support");
+
+const backKeyboard = new InlineKeyboard().text("Назад в меню", "back");
+
+bot.command("menu", async (ctx) => {
+	await ctx.reply("Выбери пункт в меню", {
+		reply_markup: menuKeyboard,
 	});
-};
+});
 
-start();
+bot.callbackQuery("order-status", async (ctx) => {
+	await ctx.callbackQuery.message.editText("Статус заказа: в пути", {
+		reply_markup: backKeyboard,
+	});
+	await ctx.callbackQuery();
+});
+
+bot.callbackQuery("support", async (ctx) => {
+	await ctx.callbackQuery.message.editText("Номер поддержки: +3806314881312", {
+		reply_markup: backKeyboard,
+	});
+	await ctx.callbackQuery();
+});
+
+bot.callbackQuery("back", async (ctx) => {
+	await ctx.callbackQuery.message.editText("Выбери пункт в меню", {
+		reply_markup: menuKeyboard,
+	});
+	await ctx.callbackQuery();
+});
+
+bot.catch((err) => {
+	const ctx = err.ctx;
+	console.error(`Error while handling update ${ctx.update.update_id}:`);
+	const e = err.error;
+
+	if (e instanceof GrammyError) {
+		console.error("Error is request:", e.description);
+	} else if (e instanceof HttpError) {
+		console.error("Cloud not contact Telegram:", e);
+	} else {
+		console.error("Unknown error:", e);
+	}
+});
+
+bot.start();
